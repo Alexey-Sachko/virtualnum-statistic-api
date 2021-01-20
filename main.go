@@ -18,19 +18,42 @@ func main () {
 	}
 
 	trRepo := NewTransactionRepo(db)
+	usrRepo := NewUserRepo(db)
 
-	
+	for {
+		var cmd string
+		fmt.Print("Введите \"ececute\": ")
+		fmt.Fscan(os.Stdin, &cmd)
 
+		switch cmd {
+		case "money":
+			ShowMoney(trRepo)
+		case "activations": {
+			var email string
+			fmt.Print("Введите \"email\" пользователя: ")
+			fmt.Fscan(os.Stdin, &email)
+			err := ShowUserActivations(usrRepo, email)
+			if err != nil {
+				panic(err)
+			}
+		}
+		default:
+			fmt.Println("Неизвестная команда")
+			continue
+		}
+	}
+}
+
+func ShowMoney(trRepo *TransactionRepo) error {
 	byDay := make(map[string][]Transaction)
 	days := make([]string, 0)
 
 	list := trRepo.Get()
 
 	for _, tr := range list {
-		// fmt.Printf("%+v\n", tr)
 		dt, err := time.Parse(time.RFC3339, tr.CreatedAt)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		dKey := hashDate(dt)
@@ -43,14 +66,39 @@ func main () {
 	}
 
 	printStatistic(byDay, days)
+
+	return nil
 }
+
+func ShowUserActivations(usrRepo *UserRepo, email string) error {
+	usr, err := usrRepo.GetByEmail(email)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("user: %+v", usr)
+
+	return nil
+}
+
 
 func hashDate(dt time.Time) string {
 	y, m, d := dt.Date()
-	return fmt.Sprintf("%d_%v_%d", y, m.String(), d)
+	return fmt.Sprintf("%d_%v_%v", y, m.String(), formatDay(d))
+}
+
+func formatDay(day int) string {
+	if (day < 10) {
+		return fmt.Sprintf("0%d", day)
+	}
+
+	return fmt.Sprintf("%d", day)
 }
 
 func printStatistic(m map[string][]Transaction, days []string) {
+	table := make([][]string, 0, len(days))
+	table = append(table, []string{"Day", "Count", "Pays", "Buys", "Day Balance"})
+
 	total := 0
 
 	for _, day := range days {
@@ -138,4 +186,30 @@ func (r *TransactionRepo) Get() []Transaction {
 	}
 
 	return result
+}
+
+type User struct {
+	ID string
+	Email string
+}
+
+type UserRepo struct {
+	DB *sql.DB
+}
+
+func NewUserRepo(db *sql.DB) *UserRepo {
+	return &UserRepo{db}
+}
+
+func (r *UserRepo) GetByEmail(e string) (*User, error) {
+	sqlStatement := `SELECT id, email FROM "user" WHERE email = $1`
+
+	user := User{}
+	rows := r.DB.QueryRow(sqlStatement, e)
+	err := rows.Scan(&user.ID, &user.Email)
+	if err != nil {
+		return nil, err 
+	}
+
+	return &user, nil
 }
